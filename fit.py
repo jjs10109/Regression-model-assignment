@@ -2,12 +2,15 @@
 
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import statsmodels.formula.api as smf
 
 TRAIN_PATH = Path(__file__).resolve().parent / "training_set.csv"
 TEST_PATH = Path(__file__).resolve().parent / "test_set.csv"
 AUCTION_PATH = Path(__file__).resolve().parent / "auction_lots.csv"
+PLOT_PATH = Path(__file__).resolve().parent / "test_predictions.png"
+RMSE_PLOT_PATH = Path(__file__).resolve().parent / "rmse_comparison.png"
 COST = 1500
 
 FULL_FORMULA = "Sale_Price ~ Mileage_K + Age_Years + Horsepower + Accident + Num_Owners"
@@ -80,11 +83,47 @@ def main() -> None:
     baseline = train["Sale_Price"].mean()
     v1 = reduced.predict(test)
 
+    baseline_rmse = test_rmse(actual, baseline)
+    v1_rmse = test_rmse(actual, v1)
+
     print()
     print(f"Baseline Test R-squared: {test_r_squared(actual, baseline):.4f}")
-    print(f"Baseline Test RMSE: ${round(test_rmse(actual, baseline)):,}")
+    print(f"Baseline Test RMSE: ${round(baseline_rmse):,}")
     print(f"V1 Test R-squared: {test_r_squared(actual, v1):.4f}")
-    print(f"V1 Test RMSE: ${round(test_rmse(actual, v1)):,}")
+    print(f"V1 Test RMSE: ${round(v1_rmse):,}")
+
+    low = min(actual.min(), v1.min())
+    high = max(actual.max(), v1.max())
+    figure, axis = plt.subplots()
+    axis.scatter(actual, v1)
+    axis.plot([low, high], [low, high], linestyle="--")
+    axis.set_xlabel("Actual Sale Price ($)")
+    axis.set_ylabel("Predicted Sale Price ($)")
+    axis.set_title("Actual vs Predicted Sale Price on Test Cars")
+    figure.tight_layout()
+    figure.savefig(PLOT_PATH)
+    plt.close(figure)
+
+    rmse_labels = ["Baseline", "V1"]
+    rmse_values = [round(baseline_rmse), round(v1_rmse)]
+    rmse_figure, rmse_axis = plt.subplots()
+    bars = rmse_axis.bar(rmse_labels, rmse_values, width=0.55, color=["#4C78A8", "#F58518"])
+    rmse_axis.set_ylabel("Test RMSE ($)")
+    rmse_axis.set_title("Test Prediction Error: Baseline vs V1")
+    rmse_axis.set_ylim(0, max(rmse_values) * 1.18)
+    rmse_axis.yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _position: f"{value:,.0f}"))
+    for bar, value in zip(bars, rmse_values):
+        rmse_axis.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height(),
+            f"${value:,}",
+            ha="center",
+            va="bottom",
+            fontsize=11,
+        )
+    rmse_figure.tight_layout()
+    rmse_figure.savefig(RMSE_PLOT_PATH, dpi=150)
+    plt.close(rmse_figure)
 
     lots = pd.read_csv(AUCTION_PATH)
     mean_sale_price = train["Sale_Price"].mean()
